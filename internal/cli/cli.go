@@ -117,6 +117,7 @@ func New() *App {
 	}
 	a.Register(newHelpCommand(a))
 	a.Register(newVersionCommand)
+	a.Register(newTreeCommand)
 	return a
 }
 
