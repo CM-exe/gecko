@@ -2,8 +2,7 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/gecko-logo-dark.png">
-    <img src="assets/gecko-logo.png" alt="Gecko logo" width="600">
+    <img src="assets/gecko-logo.png" alt="Gecko logo" width="700">
   </picture>
 </p>
 
@@ -989,7 +988,7 @@ The priority is building a **small, well-designed foundation** that can grow wit
 
 # License
 
-License to be determined.
+[MIT License](https://github.com/CM-exe/gecko/?tab=MIT-1-ov-file)
 
 ---
 
