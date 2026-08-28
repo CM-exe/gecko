@@ -60,7 +60,7 @@ func newVersionCommand() *Command {
 		Short: "Print version information",
 		Usage: "gecko version [--short]",
 		Flags: func(fs *flag.FlagSet) { fs.BoolVar(&short, "short", false, "print only the version number") },
-		Run: func(ctx context.Context, env *Env, args []string) error {
+		Run: func(ctx context.Context, env *Env, inv *Invocation) error {
 			ver, rev, when := Version()
 			if short {
 				fmt.Fprintln(env.Stdout, ver)

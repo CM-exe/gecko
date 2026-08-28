@@ -9,6 +9,9 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
+
+	"github.com/CM-exe/gecko/internal/config"
 )
 
 // ErrUsage marks an error as the user's fault: a bad flag, an unknown
@@ -50,6 +53,25 @@ type Env struct {
 	Stderr  io.Writer
 	Getenv  func(string) string
 	WorkDir string
+
+	configOnce sync.Once
+	config     *config.Config
+	configErr  error
+}
+
+// Config loads Gecko's configuration on first use. Subsequent calls
+// return the cached result, including a cached error.
+func (e *Env) Config() (*config.Config, error) {
+	e.configOnce.Do(func() {
+		e.config, e.configErr = config.Load(e.Getenv)
+	})
+	return e.config, e.configErr
+}
+
+// SetConfig overrides the configuration, for tests.
+func (e *Env) SetConfig(c *config.Config) {
+	e.configOnce.Do(func() {}) // burn the Once so Load never runs
+	e.config, e.configErr = c, nil
 }
 
 // OSEnv returns an Env bound to the real process.
@@ -67,6 +89,13 @@ func OSEnv() *Env {
 	}
 }
 
+// Invocation carries per-run state that Run needs but that isn't a
+// positional argument.
+type Invocation struct {
+	Args     []string
+	Provided map[string]bool // flags the user explicitly set
+}
+
 // Command is a single node in the command tree. It is a plain struct with
 // function fields rather than an interface so that commands discovered at
 // runtime (plugins, chapter 13) are indistinguishable from compiled-in ones.
@@ -82,7 +111,7 @@ type Command struct {
 
 	// Run executes the command. args are the positional arguments left
 	// after flag parsing.
-	Run func(ctx context.Context, env *Env, args []string) error
+	Run func(ctx context.Context, env *Env, inv *Invocation) error
 
 	// Sub holds child commands, keyed by name.
 	Sub map[string]CommandFunc
@@ -118,6 +147,7 @@ func New() *App {
 	a.Register(newHelpCommand(a))
 	a.Register(newVersionCommand)
 	a.Register(newTreeCommand)
+	a.Register(newConfigCommand)
 	return a
 }
 
@@ -191,6 +221,10 @@ func runCommand(ctx context.Context, env *Env, c *Command, path []string, args [
 		return Quiet(ErrUsage)
 	}
 
+	provided := make(map[string]bool)
+	fs.Visit(func(f *flag.Flag) { provided[f.Name] = true })
+	_ = provided
+
 	rest := fs.Args()
 
 	// Descend if the next positional argument names a subcommand.
@@ -210,7 +244,7 @@ func runCommand(ctx context.Context, env *Env, c *Command, path []string, args [
 		return Quiet(ErrUsage)
 	}
 
-	return c.Run(ctx, env, rest)
+	return c.Run(ctx, env, &Invocation{Args: rest, Provided: provided})
 }
 
 // Main is the single entry point that translates errors into exit codes.

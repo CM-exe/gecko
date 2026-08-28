@@ -186,13 +186,13 @@ func newHelpCommand(a *App) CommandFunc {
 			Name:  "help",
 			Short: "Show help for a command",
 			Usage: "gecko help [command]",
-			Run: func(ctx context.Context, env *Env, args []string) error {
-				if len(args) == 0 {
+			Run: func(ctx context.Context, env *Env, inv *Invocation) error {
+				if len(inv.Args) == 0 {
 					return a.printHelp(env.Stdout)
 				}
-				f, ok := a.commands[args[0]]
+				f, ok := a.commands[inv.Args[0]]
 				if !ok {
-					fmt.Fprintf(env.Stderr, "gecko: unknown command %q\n", args[0])
+					fmt.Fprintf(env.Stderr, "gecko: unknown command %q\n", inv.Args[0])
 					return ErrUsage
 				}
 				c := f.f()

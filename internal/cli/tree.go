@@ -46,12 +46,30 @@ func newTreeCommand() *Command {
 			fs.BoolVar(&ascii, "ascii", false, "use ASCII drawing characters")
 			fs.Var(&ignores, "ignore", "exclude matching entries (repeatable)")
 		},
-		Run: func(ctx context.Context, env *Env, args []string) error {
-			target := "."
-			if len(args) > 0 {
-				target = args[0]
+		Run: func(ctx context.Context, env *Env, inv *Invocation) error {
+			cfg, err := env.Config()
+			if err != nil {
+				return err
 			}
-			if len(args) > 1 {
+
+			opts := filesystem.TreeOptions{
+				MaxDepth: cfg.Tree.MaxDepth,
+				Ignore:   cfg.Tree.Ignore,
+			}
+
+			// Flags win over config but only if actually set.
+			if inv.Provided["depth"] || inv.Provided["L"] {
+				opts.MaxDepth = depth
+			}
+			if inv.Provided["ignore"] {
+				opts.Ignore = ignores
+			}
+
+			target := "."
+			if len(inv.Args) > 0 {
+				target = inv.Args[0]
+			}
+			if len(inv.Args) > 1 {
 				fmt.Fprintf(env.Stderr, "gecko tree: too many arguments\n")
 				return Quiet(ErrUsage)
 			}
@@ -71,12 +89,12 @@ func newTreeCommand() *Command {
 			fsys := os.DirFS(abs)
 
 			stats, err := filesystem.WriteTree(ctx, env.Stdout, fsys, ".", filesystem.TreeOptions{
-				MaxDepth: depth,
+				MaxDepth: opts.MaxDepth,
 				ShowAll:  all,
 				DirsOnly: dirsOnly,
 				ShowSize: showSize,
 				ASCII:    ascii,
-				Ignore:   []string(ignores),
+				Ignore:   opts.Ignore,
 			})
 			if err != nil {
 				return fmt.Errorf("tree %s: %w", target, err)
