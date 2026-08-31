@@ -7,6 +7,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"testing/fstest"
@@ -104,4 +106,85 @@ func BenchmarkMultiAlgo(b *testing.B) {
 			hashParallel(bytes.NewReader(data), algos)
 		}
 	})
+}
+
+// BenchmarkFindWorkers measures throughput for the metadata-filtered walk
+// path, where the worker pool is actually exercised. Use a real tree on an SSD
+// or network mount by setting BENCH_FIND_ROOT, or let the benchmark build a
+// representative tree under the temp dir.
+//
+// The result is usually a throughput curve that climbs quickly from 1 to 4 or
+// 8 workers, then flattens as the storage layer becomes the bottleneck. On SSDs
+// the plateau is typically in the 8-16 worker range; on network mounts it is
+// often lower and noisier because the syscall / read latency dominates. This is
+// a good fit for a default of NumCPU()*4, capped at 64: it gives enough
+// parallelism to hide I/O latency without creating a large queue of blocked
+// goroutines on slower mounts.
+func BenchmarkFindWorkers(b *testing.B) {
+	root, err := benchFindRoot(b)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	const (
+		dirs      = 200
+		filesEach = 128
+		fileSize  = 4 << 10
+	)
+	b.SetBytes(int64(dirs * filesEach * fileSize))
+	b.ReportAllocs()
+
+	for _, workers := range []int{1, 2, 4, 8, 16, 32, 64} {
+		b.Run(fmt.Sprintf("workers=%d", workers), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				out := make(chan Match, 1024)
+				go func() {
+					for range out {
+					}
+				}()
+
+				stats, err := Find(context.Background(), root, FindOptions{
+					Pattern: "*.txt",
+					MinSize: 1,
+					Workers: workers,
+				}, out)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if stats.Scanned == 0 {
+					b.Fatal("Find scanned zero files")
+				}
+			}
+		})
+	}
+}
+
+func benchFindRoot(b *testing.B) (string, error) {
+	if root := os.Getenv("BENCH_FIND_ROOT"); root != "" {
+		if fi, err := os.Stat(root); err == nil && fi.IsDir() {
+			return root, nil
+		}
+	}
+
+	root := b.TempDir()
+	const (
+		dirs      = 200
+		filesEach = 128
+		fileSize  = 4 << 10
+	)
+	payload := bytes.Repeat([]byte("x"), fileSize)
+
+	for d := 0; d < dirs; d++ {
+		dir := filepath.Join(root, fmt.Sprintf("dir%03d", d))
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return "", err
+		}
+		for f := 0; f < filesEach; f++ {
+			name := filepath.Join(dir, fmt.Sprintf("file%04d.txt", f))
+			if err := os.WriteFile(name, payload, 0o644); err != nil {
+				return "", err
+			}
+		}
+	}
+	return root, nil
 }

@@ -149,6 +149,8 @@ func New() *App {
 	a.Register(newTreeCommand)
 	a.Register(newConfigCommand)
 	a.Register(newHashCommand)
+	a.Register(newFindCommand)
+	a.Register(newCleanCommand)
 	return a
 }
 
